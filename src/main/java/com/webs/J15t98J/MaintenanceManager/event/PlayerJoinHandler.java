@@ -17,7 +17,7 @@ public class PlayerJoinHandler implements EventHandler<PlayerJoinEvent> {
     public void handle(PlayerJoinEvent event) throws Exception {
         Player player = event.getUser();
         if(!player.hasPermission("maintenance.exempt")) {
-            player.kick(Texts.of(""));
+            player.kick(Texts.of(joinMessage));
         }
     }
 }

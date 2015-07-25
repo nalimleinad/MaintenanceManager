@@ -21,10 +21,12 @@ import org.spongepowered.api.util.command.spec.CommandSpec;
 
 import java.io.IOException;
 
+
 //TODO: Schedule command
 //TODO: maintenance_start/maintenance_end events for other plugins to hook
+//TODO: Possibly refactor commands into one executor, and fix bindWith() flag calls so that /help displays it properly (but Sponge doesn't seem to display plugin commands in /help yet)
 
-@Plugin(id = "maintenance", name = "MaintenanceManager", version = "1.0")
+@Plugin(id = "maintenance", name = "MaintenanceManager", version = "0.1")
 public class MaintenanceManager {
 
     @Inject public Game game;
@@ -155,6 +157,17 @@ public class MaintenanceManager {
             case OFF:
                 game.getEventManager().unregister(joinHandler);
                 maintenance = false;
+                if(!(rootNode == null)) {
+                    rootNode.getNode("persistence").getNode("lastStatus").setValue(false);
+                    rootNode.getNode("persistence").getNode("persist").setValue(false);
+                    if(saveConfig()) {
+                        logger.info("Disabled maintenence.");
+                    } else {
+                        logger.error("Failed to disable persistence.");
+                    }
+                } else {
+                    logger.error("Failed to disable persistence - could not open the config file.");
+                }
         }
     }
 }
