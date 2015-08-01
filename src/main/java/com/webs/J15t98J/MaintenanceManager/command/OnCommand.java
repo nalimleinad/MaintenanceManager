@@ -34,21 +34,24 @@ public class OnCommand implements CommandExecutor {
             boolean shouldKick = args.getOne("k").equals(Optional.of(true));
             boolean shouldPersist = args.getOne("p").equals(Optional.of(true));
 
-            src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
-                    .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
-                    .append(Texts.builder("enabled").color(TextColors.RED).build())
-                    .append(Texts.builder(shouldKick ? "; all non-exempt players kicked!" : ".").color(TextColors.WHITE).build())
-                    .build());
+            if(parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
+                src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
+                        .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
+                        .append(Texts.builder("enabled").color(TextColors.RED).build())
+                        .append(Texts.builder(shouldKick ? "; all non-exempt players kicked!" : ".").color(TextColors.WHITE).build())
+                        .build());
 
-            if (shouldKick) {
-                for (Player player : parent.game.getServer().getOnlinePlayers()) {
-                    if(player != null &&!player.hasPermission("maintenance.exempt")) {
-                        player.kick(Texts.of(kickMessage));
+                if(shouldKick) {
+                    for (Player player : parent.game.getServer().getOnlinePlayers()) {
+                        if (player != null && !player.hasPermission("maintenance.exempt")) {
+                            player.kick(Texts.of(kickMessage));
+                        }
                     }
                 }
+            } else {
+                src.sendMessage(Texts.builder("Something went wrong! You should probably check the logs...").color(TextColors.RED).build());
             }
 
-            parent.setMaintenance(Status.ON, shouldKick, shouldPersist);
         } else {
             src.sendMessage(Texts.builder("The server is already in maintenance mode!").color(TextColors.RED).build());
         }
