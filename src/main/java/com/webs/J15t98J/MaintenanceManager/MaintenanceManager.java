@@ -6,6 +6,7 @@ import com.webs.J15t98J.MaintenanceManager.command.OnCommand;
 import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinHandler;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
+import org.mcstats.Metrics;
 import org.slf4j.Logger;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.entity.player.Player;
@@ -38,7 +39,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 //TODO: broadcasts to players 15m before scheduled downtime
-//TODO: metrics
 //TODO: maintenance_start/maintenance_end events for other plugins to hook
 //TODO: possibly refactor commands into one executor, and fix bindWith() flag calls so that /help displays it properly (but Sponge doesn't seem to display plugin commands in /help yet)
 
@@ -65,6 +65,14 @@ public class MaintenanceManager {
 
     @Subscribe
     public void onInitialization(InitializationEvent event) {
+        // Metrics data TODO: test when fix is available
+        try {
+            Metrics metrics = new Metrics(game, game.getPluginManager().getPlugin("maintenance").get());
+            metrics.start();
+        } catch(IOException e) {
+            logger.error("Error starting Metrics: ", e);
+        }
+
         // Attempt to open the config file and grab a root node handle
         try {
             rootNode = configManager.load();
