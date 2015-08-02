@@ -4,7 +4,6 @@ import com.google.inject.Inject;
 import com.webs.J15t98J.MaintenanceManager.command.OffCommand;
 import com.webs.J15t98J.MaintenanceManager.command.OnCommand;
 import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinHandler;
-import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
 import org.slf4j.Logger;
@@ -16,19 +15,29 @@ import org.spongepowered.api.event.entity.player.PlayerJoinEvent;
 import org.spongepowered.api.event.state.InitializationEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.service.config.DefaultConfig;
+import org.spongepowered.api.service.sql.SqlService;
 import org.spongepowered.api.text.Texts;
 import org.spongepowered.api.text.sink.MessageSinks;
 import org.spongepowered.api.util.command.CommandSource;
 import org.spongepowered.api.util.command.args.GenericArguments;
 import org.spongepowered.api.util.command.spec.CommandSpec;
 
+import javax.sql.DataSource;
+import java.io.File;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.TreeSet;
 
-//TODO: schedule command and broadcasts to players 15m before scheduled downtime
+//TODO: broadcasts to players 15m before scheduled downtime
 //TODO: metrics
 //TODO: maintenance_start/maintenance_end events for other plugins to hook
 //TODO: possibly refactor commands into one executor, and fix bindWith() flag calls so that /help displays it properly (but Sponge doesn't seem to display plugin commands in /help yet)
@@ -38,13 +47,16 @@ public class MaintenanceManager {
 
     @Inject public Game game;
     @Inject private Logger logger;
-    @Inject @DefaultConfig(sharedRoot = true) private ConfigurationLoader<CommentedConfigurationNode> configManager;
+    @Inject @DefaultConfig(sharedRoot = false) private File config;
+    @Inject @DefaultConfig(sharedRoot = false) private ConfigurationLoader<CommentedConfigurationNode> configManager;
+
+    private SqlService sql;
 
     private EventHandler<PlayerJoinEvent> joinHandler = new PlayerJoinHandler();
     private OnCommand onCMD = new OnCommand(this);
 
     private boolean maintenance;
-    private ConfigurationNode rootNode;
+    private CommentedConfigurationNode rootNode;
 
     private HashMap<String, String> beforeCloseMessage = new HashMap<>();
     private HashMap<String, String> onCloseMessage = new HashMap<>();
@@ -63,28 +75,28 @@ public class MaintenanceManager {
 
         if(rootNode != null) {
             // Retrieve any set values, or use defaults if non-existant
-            ConfigurationNode messages = rootNode.getNode("message");
+            CommentedConfigurationNode messages = rootNode.getNode("message").setComment("Configure the messages displayed to users when they get disconnected.");
             String kickMessage = messages.getNode("kick").getString("The server is closing for maintenance. Please come back later!");
             String joinMessage = messages.getNode("join").getString("The server is closed for maintenance. Please come back later!");
 
-            ConfigurationNode announcements = rootNode.getNode("announcement");
-            String warnTime = announcements.getNode("warnTime").getString("0:15:0");
-            ConfigurationNode beforeCloseNode = announcements.getNode("beforeClose");
-            beforeCloseMessage.put("exemptSoft", beforeCloseNode.getNode("exemptSoft").getString("The server will close for maintenance in %t, but as an exempt player you'll still be able to connect after this time."));
-            beforeCloseMessage.put("exemptHard", beforeCloseNode.getNode("exemptHard").getString("The server will close for maintenance in %t, but as an exempt player you won't be kicked or prevented from joining."));
-            beforeCloseMessage.put("notExemptSoft", beforeCloseNode.getNode("notExemptSoft").getString("The server will close for maintenance in %t. You won't be kicked, but you won't be able to re-connect after this time."));
-            beforeCloseMessage.put("notExemptHard", beforeCloseNode.getNode("notExemptHard").getString("The server will close for maintenance in %t. You will be kicked and prevented from re-connecting until the server re-opens."));
-            ConfigurationNode onCloseNode = announcements.getNode("onClose");
-            onCloseMessage.put("exempt", onCloseNode.getNode("exempt").getString("The server is now closed for maintenance."));
-            onCloseMessage.put("notExempt", onCloseNode.getNode("notExempt").getString("The server is now closed for maintenance. If you disconnect now, you won't be able to reconnect!"));
-            beforeOpenMessage = announcements.getNode("beforeOpen").getString("The server will open in %t.");
-            onOpenMessage = announcements.getNode("onOpen").getString("The server is now open.");
+            CommentedConfigurationNode announcements = rootNode.getNode("announcement").setComment("Configure the messages of broadcasts to the players. Where appropriate, the plugin will replace %t with your chosen warnTime.");
+            String warnTime = announcements.getNode("warnTime").setComment("How long in advance the server will tell players about maintenance. (HH:MM:SS)").getString("0:15:0");
+            CommentedConfigurationNode beforeCloseNode = announcements.getNode("beforeClose");
+            beforeCloseMessage.put("exemptSoft", beforeCloseNode.getNode("exemptSoft").setComment("The warning to users with the maintenance.exempt permission before soft maintenance.").getString("The server will close for maintenance in %t, but as an exempt player you'll still be able to connect after this time."));
+            beforeCloseMessage.put("exemptHard", beforeCloseNode.getNode("exemptHard").setComment("The warning to users with the maintenance.exempt permission before hard maintenance.").getString("The server will close for maintenance in %t, but as an exempt player you won't be kicked or prevented from joining."));
+            beforeCloseMessage.put("notExemptSoft", beforeCloseNode.getNode("notExemptSoft").setComment("The warning to users without the maintenance.exempt permission before soft maintenance.").getString("The server will close for maintenance in %t. You won't be kicked, but you won't be able to re-connect after this time."));
+            beforeCloseMessage.put("notExemptHard", beforeCloseNode.getNode("notExemptHard").setComment("The warning to users without the maintenance.exempt permission before hard maintenance.").getString("The server will close for maintenance in %t. You will be kicked and prevented from re-connecting until the server re-opens."));
+            CommentedConfigurationNode onCloseNode = announcements.getNode("onClose");
+            onCloseMessage.put("exempt", onCloseNode.getNode("exempt").setComment("The message shown to exempt players when maintenance starts.").getString("The server is now closed for maintenance."));
+            onCloseMessage.put("notExempt", onCloseNode.getNode("notExempt").setComment("The message shown to non-exempt players when soft maintenance starts.").getString("The server is now closed for maintenance. If you disconnect now, you won't be able to reconnect!"));
+            beforeOpenMessage = announcements.getNode("beforeOpen").setComment("The warning to users before the server opens.").getString("The server will open in %t.");
+            onOpenMessage = announcements.getNode("onOpen").setComment("The message shown to players when the server opens.").getString("The server is now open.");
 
-            ConfigurationNode persistence = rootNode.getNode("persistence");
+            CommentedConfigurationNode persistence = rootNode.getNode("persistence").setComment("Used by the plugin to keep maintenance active even after a restart.\nDon't touch unless you know what you're doing!");
             boolean shouldPersist = persistence.getNode("persist").getBoolean(false);
             boolean lastStatus = persistence.getNode("lastStatus").getBoolean(false);
 
-            boolean shouldShare = rootNode.getNode("notifyPlugins").getBoolean(true);
+            boolean shouldShare = rootNode.getNode("notifyPlugins").setComment("Controls whether the plugin tells other plugins when maintenance starts/stops.\nOn by default; disable if other plugins add annoying compatability features.").getBoolean(true);
 
             // Distribute config values to relevant classes
             if(lastStatus && shouldPersist) {
@@ -117,15 +129,26 @@ public class MaintenanceManager {
 
         saveConfig();
 
+        // Read any scheduled maintenance periods from the database
+        try{
+            for(ScheduleObject item : getSchedule()) {
+                logger.info("Found an item starting at " + item.start);
+                // TODO: call scheduler
+            }
+        } catch(SQLException e) {
+            logger.error("Could not open database: ", e);
+        }
+
         // Register commands
         CommandSpec onCommand = CommandSpec.builder()
                 .description(Texts.of("Activate maintenance mode"))
                 .permission("maintenance.on")
                 .executor(onCMD)
                 .arguments(GenericArguments.flags()
-                        .permissionFlag("maintenance.kick", "k")
-                        .permissionFlag("maintenance.persist", "p")
-                        .permissionFlag("maintenance.schedule", "s")
+                        .permissionFlag("maintenance.kick", "k", "-kick")
+                        .permissionFlag("maintenance.persist", "p", "-persist")
+                        .permissionFlag("maintenance.schedule", "s", "-schedule")
+                        .permissionFlag("maintenance.schedule", "d", "-duration")
                         .buildWith(GenericArguments.none()))
                 .build();
 
@@ -133,9 +156,6 @@ public class MaintenanceManager {
                 .description(Texts.of("Deactivate maintenance mode"))
                 .permission("maintenance.off")
                 .executor(new OffCommand(this))
-                .arguments(GenericArguments.flags()
-                        .permissionFlag("maintenance.schedule", "s")
-                        .buildWith(GenericArguments.none()))
                 .build();
 
         CommandSpec maintenanceCommand = CommandSpec.builder()
@@ -151,23 +171,67 @@ public class MaintenanceManager {
     private boolean saveConfig() {
         // Attempt to save any changes to the config
         try {
+            if(!config.getParentFile().exists()) {
+                config.getParentFile().mkdir();
+            }
             configManager.save(rootNode);
             return true;
         } catch (IOException e) {
-            logger.error("Failed to save to config file:", e);
+            logger.error("", e);
         }
         return false;
+    }
+
+    private DataSource getDB() throws SQLException {
+        if(sql == null) {
+            sql = game.getServiceManager().provide(SqlService.class).get();
+        }
+        return sql.getDataSource("jdbc:h2:./config/maintenance/schedule");
+    }
+
+    private ArrayList<ScheduleObject> getSchedule() throws SQLException {
+        ArrayList<ScheduleObject> returnResult = new ArrayList<>();
+
+        try(Connection connection = getDB().getConnection()) {
+            connection.prepareStatement("CREATE TABLE IF NOT EXISTS schedule(start TEXT, duration TEXT, kickPlayers BOOLEAN, persistRestart BOOLEAN)").execute();
+            ResultSet results = connection.prepareStatement("SELECT * FROM schedule").executeQuery();
+            results.beforeFirst();
+            ScheduleObject item;
+            while(results.next()) {
+                item = new ScheduleObject(LocalDateTime.parse(results.getString("start"), DateTimeFormatter.ISO_LOCAL_DATE_TIME), Duration.parse(results.getString("duration")), results.getBoolean("kickPlayers"), results.getBoolean("persistRestart"));
+                if(!item.start.plus(item.duration).isBefore(LocalDateTime.now())) {
+                    returnResult.add(item);
+                }
+            }
+            connection.close();
+        }
+        return returnResult;
+    }
+
+    private void addToSchedule(ScheduleObject item) throws SQLException {
+        try(Connection connection = getDB().getConnection()) {
+            PreparedStatement statement = connection.prepareStatement("INSERT INTO schedule VALUES(?, ?, ?, ?)");
+            statement.setString(1, item.start.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            statement.setString(2, item.duration.toString());
+            statement.setBoolean(3, item.kickPlayers);
+            statement.setBoolean(4, item.persistRestart);
+            statement.execute();
+        }
     }
 
     public boolean inMaintenance() {
         return maintenance;
     }
 
-    public void setMaintenance(Status status) {
-        setMaintenance(status, false, false);
+    public boolean setMaintenance(Status status) {
+        return setMaintenance(status, false, false, null, null);
     }
 
     public boolean setMaintenance(Status status, boolean kickPlayers, boolean persistRestart) {
+        return setMaintenance(status, kickPlayers, persistRestart, null, null);
+    }
+
+    public boolean setMaintenance(Status status, boolean kickPlayers, boolean persistRestart, LocalDateTime startTime, Duration duration) {
         switch(status) {
             case ON:
                 boolean couldPersist = persistRestart;
@@ -189,7 +253,7 @@ public class MaintenanceManager {
                 maintenance = true;
 
                 if(!kickPlayers) {
-                    Set<CommandSource> recipients = new HashSet<CommandSource>();
+                    Set<CommandSource> recipients = new HashSet<>();
                     for(Player player : game.getServer().getOnlinePlayers()) {
                         if(!player.hasPermission("maintenance.exempt")) {
                             recipients.add(player);
@@ -204,7 +268,12 @@ public class MaintenanceManager {
 
                 return couldPersist == persistRestart;
             case SCHEDULED:
-                // NYI
+                // TODO: check if given schedule is valid
+                try {
+                    addToSchedule(new ScheduleObject(startTime, duration, kickPlayers, persistRestart));
+                } catch (SQLException e) {
+                    logger.error("Unable to schedule maintenance: ", e);
+                }
                 return true;
             case OFF:
                 boolean success = true;
@@ -232,4 +301,6 @@ public class MaintenanceManager {
                 return false;
         }
     }
+
+    //TODO: schedule events
 }

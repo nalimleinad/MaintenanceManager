@@ -12,6 +12,12 @@ import org.spongepowered.api.util.command.CommandSource;
 import org.spongepowered.api.util.command.args.CommandContext;
 import org.spongepowered.api.util.command.spec.CommandExecutor;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
 public class OnCommand implements CommandExecutor {
 
     private MaintenanceManager parent;
@@ -27,13 +33,14 @@ public class OnCommand implements CommandExecutor {
 
     @Override
     public CommandResult execute(CommandSource src, CommandContext args) throws CommandException {
-        if(args.getOne("s").equals(Optional.of(true))) {
-            // SCHEDULE NYI
-            src.sendMessage(Texts.builder("Scheduling system NYI.").color(TextColors.RED).build());
-        } else if(!parent.inMaintenance()) {
-            boolean shouldKick = args.getOne("k").equals(Optional.of(true));
-            boolean shouldPersist = args.getOne("p").equals(Optional.of(true));
+        boolean shouldKick = args.getOne("k").equals(Optional.of(true));
+        boolean shouldPersist = args.getOne("p").equals(Optional.of(true));
 
+        if(args.getOne("s").isPresent() || args.getOne("d").isPresent()) {
+            LocalDateTime startTime = LocalDateTime.parse(args.getOne("s").toString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            Duration duration = Duration.parse(args.getOne("d").toString());
+            parent.setMaintenance(Status.SCHEDULED, shouldKick, shouldPersist, startTime, duration);
+        } else if(!parent.inMaintenance()) {
             if(parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
                 src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
                         .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
