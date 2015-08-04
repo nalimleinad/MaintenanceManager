@@ -2,6 +2,7 @@ package com.webs.J15t98J.MaintenanceManager.command;
 
 import com.google.common.base.Optional;
 import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
+import com.webs.J15t98J.MaintenanceManager.ScheduleObject;
 import com.webs.J15t98J.MaintenanceManager.Status;
 import org.spongepowered.api.entity.player.Player;
 import org.spongepowered.api.text.Texts;
@@ -55,7 +56,7 @@ public class OnCommand implements CommandExecutor {
             LocalDateTime startTime = args.getOne("time").isPresent() ? LocalDateTime.parse((args.getOne("date").isPresent() ? args.getOne("date").get().toString() : LocalDate.now().toString()) + "T" + args.getOne("time").get().toString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME) : null;
 
             if (startTime != null) {
-                parent.scheduleMaintenance(startTime, duration, shouldKick, shouldPersist);
+                parent.scheduleMaintenance(new ScheduleObject(startTime, duration, shouldKick, shouldPersist));
 
                 boolean startingSameDay = startTime.truncatedTo(ChronoUnit.DAYS).isEqual(LocalDateTime.now().truncatedTo(ChronoUnit.DAYS));
                 src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
@@ -73,7 +74,7 @@ public class OnCommand implements CommandExecutor {
                     end = LocalDateTime.now().plus(duration);
                 }
 
-                if(duration != null? parent.scheduleMaintenance(LocalDateTime.now(), duration, shouldKick, shouldPersist) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
+                if(duration != null? parent.scheduleMaintenance(new ScheduleObject(LocalDateTime.now(), duration, shouldKick, shouldPersist)) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
                     src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD) // First two builders tell the user if it's persistent
                             .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
                             .append(Texts.builder("enabled").color(TextColors.RED).build()) // Next one just says enabled

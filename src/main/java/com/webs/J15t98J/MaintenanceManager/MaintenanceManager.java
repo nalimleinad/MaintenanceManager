@@ -28,20 +28,14 @@ import org.spongepowered.api.util.command.spec.CommandSpec;
 import javax.sql.DataSource;
 import java.io.File;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static org.spongepowered.api.util.command.args.GenericArguments.*;
@@ -172,7 +166,7 @@ public class MaintenanceManager {
         taskBuilder = game.getScheduler().getTaskBuilder();
         try{
             for(ScheduleObject item : getSchedule()) {
-                scheduleMaintenance(item.start, item.duration, item.kickPlayers, item.persistRestart);
+                scheduleMaintenance(new ScheduleObject(item.start, item.duration, item.kickPlayers, item.persistRestart, item.id));
             }
         } catch(SQLException e) {
             logger.error("Error with database: ", e);
@@ -252,7 +246,7 @@ public class MaintenanceManager {
             results.beforeFirst();
             ScheduleObject item;
             while(results.next()) {
-                item = new ScheduleObject(LocalDateTime.parse(results.getString("start"), DateTimeFormatter.ISO_LOCAL_DATE_TIME), !results.getString("duration").equals("")? Duration.parse(results.getString("duration")) : Duration.ofHours(0), results.getBoolean("kickPlayers"), results.getBoolean("persistRestart"), results.getInt("id"));
+                item = new ScheduleObject(LocalDateTime.parse(results.getString("start"), DateTimeFormatter.ISO_LOCAL_DATE_TIME), !results.getString("duration").equals("")? Duration.parse(results.getString("duration")) : Duration.ofHours(0), results.getBoolean("kickPlayers"), results.getBoolean("persistRestart"), results.getLong("id"));
                 if(!item.start.isBefore(LocalDateTime.now()) || (!item.start.plus(item.duration).isBefore(LocalDateTime.now()) && item.persistRestart)) {
                     returnResult.add(item);
                 } else {
@@ -264,31 +258,41 @@ public class MaintenanceManager {
         return returnResult;
     }
 
-    private void addToSchedule(ScheduleObject item) throws SQLException {
+    private Long addToSchedule(ScheduleObject item) throws SQLException {
         try(Connection connection = getDB().getConnection()) {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO schedule(start, duration, kickPlayers, persistRestart) VALUES(?, ?, ?, ?)");
+            PreparedStatement statement = connection.prepareStatement("INSERT INTO schedule(start, duration, kickPlayers, persistRestart) VALUES(?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+            logger.info("Start = " + item.start.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            logger.info("Duration = " + (item.duration != null ? item.duration.toString() : ""));
             statement.setString(1, item.start.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             statement.setString(2, item.duration != null ? item.duration.toString() : "");
             statement.setBoolean(3, item.kickPlayers);
             statement.setBoolean(4, item.persistRestart);
             statement.execute();
+            ResultSet keys = statement.getGeneratedKeys();
+            keys.first();
+            return keys.getLong(1);
         }
+
     }
 
-    public void removeFromSchedule(int itemID) throws SQLException {
+    public void removeFromSchedule(Integer itemID) throws SQLException {
         try(Connection connection = getDB().getConnection()) {
             PreparedStatement statement = connection.prepareStatement("DELETE FROM schedule WHERE id=?");
             statement.setInt(1, itemID);
             statement.execute();
         }
-        // TODO: search and destroy (cancel) relevant scheduled tasks (mode changer & warning)
+        for(Task task : game.getScheduler().getScheduledTasks(this)) {
+            if(task.getName().contains(String.valueOf(itemID))) {
+                task.cancel();
+            }
+        }
     }
 
     public void clearSchedule() throws SQLException {
         try(Connection connection = getDB().getConnection()) {
             connection.prepareStatement("DELETE FROM schedule").execute();
         }
-        game.getScheduler().getScheduledTasks(this).forEach(task -> task.cancel());
+        game.getScheduler().getScheduledTasks(this).forEach(Task::cancel); // TODO: J8 - keep?
     }
 
     public boolean inMaintenance() {
@@ -363,15 +367,18 @@ public class MaintenanceManager {
         }
     }
 
-    public boolean scheduleMaintenance(LocalDateTime start, Duration duration, boolean kickPlayers, boolean persistRestart) {
+    public boolean scheduleMaintenance(ScheduleObject item) {
         // TODO: check if given schedule is valid
         try {
-            addToSchedule(new ScheduleObject(start, duration, kickPlayers, persistRestart));
+            if(item.id == null) {
+                item.id = addToSchedule(item);
+                logger.info("Created item ID = " + item.id);
+            }
 
-            createTasks(Status.ON, kickPlayers, persistRestart, start);
-            if(duration != null) {
-                createTasks(Status.OFF, false, false, start.plus(duration));
-                ((PlayerJoinHandler)joinHandler).setOpeningTime(start.plus(duration).atZone(ZoneId.systemDefault()));
+            createTasks(Status.ON, item.kickPlayers, item.persistRestart, item.start, item.id);
+            if(item.duration != null) {
+                createTasks(Status.OFF, false, false, item.start.plus(item.duration), item.id);
+                ((PlayerJoinHandler)joinHandler).setOpeningTime(item.start.plus(item.duration).atZone(ZoneId.systemDefault()));
             } else {
                 ((PlayerJoinHandler)joinHandler).setOpeningTime(null);
             }
@@ -383,17 +390,18 @@ public class MaintenanceManager {
         return false;
     }
 
-    private void createTasks(Status status, boolean kickPlayers, boolean persistRestart, LocalDateTime start) {
+    private void createTasks(Status status, boolean kickPlayers, boolean persistRestart, LocalDateTime start, Long ID) {
         Task temp;
         temp = taskBuilder.execute(new Runnable() {
             @Override
             public void run() {
                 setMaintenance(status, kickPlayers, persistRestart);
             }
-        }).delay(Math.max(LocalDateTime.now().until(start, ChronoUnit.MILLIS), 0), TimeUnit.MILLISECONDS).submit(this);
+        }).name("maintenance_action_" + status.toString() + "_" + ID).delay(Math.max(LocalDateTime.now().until(start, ChronoUnit.MILLIS), 0), TimeUnit.MILLISECONDS).submit(this);
         if(status == Status.OFF) {
             openServerTask = temp;
         }
+        logger.info("maintenance_action_" + status.toString() + "_" + ID);
         Long warnDelay = LocalDateTime.now().until(start.minus(maintenanceWarnTime), ChronoUnit.MILLIS);
 
         temp = null;
@@ -408,7 +416,7 @@ public class MaintenanceManager {
                         MessageSinks.toAll().sendMessage(Texts.of(beforeOpenMessage));
                     }
                 }
-            }).delay(warnDelay, TimeUnit.MILLISECONDS).submit(this);
+            }).name("maintenance_warn_" + status.toString() + "_" + ID).delay(warnDelay, TimeUnit.MILLISECONDS).submit(this);
         }
         if(status == Status.OFF) {
             openServerWarningTask = temp;
