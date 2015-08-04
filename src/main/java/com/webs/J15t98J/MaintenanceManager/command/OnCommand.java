@@ -56,16 +56,21 @@ public class OnCommand implements CommandExecutor {
             LocalDateTime startTime = args.getOne("time").isPresent() ? LocalDateTime.parse((args.getOne("date").isPresent() ? args.getOne("date").get().toString() : LocalDate.now().toString()) + "T" + args.getOne("time").get().toString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME) : null;
 
             if (startTime != null) {
-                parent.scheduleMaintenance(new ScheduleObject(startTime, duration, shouldKick, shouldPersist));
+                if(startTime.isAfter(LocalDateTime.now())) {
+                    parent.scheduleMaintenance(new ScheduleObject(startTime, duration, shouldKick, shouldPersist));
 
-                boolean startingSameDay = startTime.truncatedTo(ChronoUnit.DAYS).isEqual(LocalDateTime.now().truncatedTo(ChronoUnit.DAYS));
-                src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
-                        .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance scheduled to start " + (startingSameDay ? "at " : "")).color(TextColors.WHITE).build())
-                        .append(Texts.builder((startingSameDay ? "" : startTime.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) + " at ") + startTime.truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_LOCAL_TIME)).color(TextColors.GOLD).build())
-                        .append(Texts.builder(duration != null ? ", lasting until " : "").color(TextColors.WHITE).build())
-                        .append(Texts.builder(duration != null ? ((startTime.truncatedTo(ChronoUnit.DAYS).isEqual(startTime.plus(duration).truncatedTo(ChronoUnit.DAYS)) ? "" : startTime.plus(duration).truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) + " at ") + startTime.plus(duration).format(DateTimeFormatter.ISO_LOCAL_TIME)) : "").build())
-                        .append(Texts.builder(shouldKick ? "; all non-exempt players will be kicked." : ".").color(TextColors.WHITE).build())
-                        .build());
+                    boolean startingSameDay = startTime.truncatedTo(ChronoUnit.DAYS).isEqual(LocalDateTime.now().truncatedTo(ChronoUnit.DAYS));
+                    src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD)
+                            .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance scheduled to start " + (startingSameDay ? "at " : "")).color(TextColors.WHITE).build())
+                            .append(Texts.builder((startingSameDay ? "" : startTime.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) + " at ") + startTime.truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_LOCAL_TIME)).color(TextColors.GOLD).build())
+                            .append(Texts.builder(duration != null ? ", lasting until " : "").color(TextColors.WHITE).build())
+                            .append(Texts.builder(duration != null ? ((startTime.truncatedTo(ChronoUnit.DAYS).isEqual(startTime.plus(duration).truncatedTo(ChronoUnit.DAYS)) ? "" : startTime.plus(duration).truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) + " at ") + startTime.plus(duration).format(DateTimeFormatter.ISO_LOCAL_TIME)) : "").build())
+                            .append(Texts.builder(shouldKick ? "; all non-exempt players will be kicked." : ".").color(TextColors.WHITE).build())
+                            .build());
+                } else {
+                    src.sendMessage(Texts.builder("The specified start point has already passed.").color(TextColors.RED).build());
+                    return CommandResult.empty();
+                }
             } else if(!parent.inMaintenance()) {
                 LocalDateTime start = null;
                 LocalDateTime end = null;
@@ -74,7 +79,7 @@ public class OnCommand implements CommandExecutor {
                     end = LocalDateTime.now().plus(duration);
                 }
 
-                if(duration != null? parent.scheduleMaintenance(new ScheduleObject(LocalDateTime.now(), duration, shouldKick, shouldPersist)) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
+                if(duration != null? parent.scheduleMaintenance(new ScheduleObject(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS), duration, shouldKick, shouldPersist)) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
                     src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD) // First two builders tell the user if it's persistent
                             .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
                             .append(Texts.builder("enabled").color(TextColors.RED).build()) // Next one just says enabled
@@ -99,7 +104,7 @@ public class OnCommand implements CommandExecutor {
             }
         } catch(DateTimeParseException e) {
             src.sendMessage(Texts.builder("\"" + e.getParsedString().replaceAll("[PpTt]", "") + "\" is not correctly formatted.").color(TextColors.RED).build());
-            src.sendMessage(Texts.builder("Format it like these: " + (e.getStackTrace()[0].toString().contains("Duration") ? "6d:5h:3m:2s / 1h:32s" : "12:05:30 / 5:04:06")).color(TextColors.RED).build());
+            src.sendMessage(Texts.builder("Format it like these: " + (e.getStackTrace()[0].toString().contains("Duration") ? "6d5h3m2s / 1h32s" : "12:05:30 / 5:04:06")).color(TextColors.RED).build());
             return CommandResult.empty();
         }
         return CommandResult.success();

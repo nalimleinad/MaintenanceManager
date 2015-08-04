@@ -2,6 +2,7 @@ package com.webs.J15t98J.MaintenanceManager.command;
 
 import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
 import com.webs.J15t98J.MaintenanceManager.ScheduleObject;
+import com.webs.J15t98J.MaintenanceManager.Status;
 import org.spongepowered.api.service.pagination.PaginationBuilder;
 import org.spongepowered.api.service.pagination.PaginationService;
 import org.spongepowered.api.text.Text;
@@ -15,6 +16,7 @@ import org.spongepowered.api.util.command.spec.CommandExecutor;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.time.temporal.ChronoUnit;
@@ -44,6 +46,10 @@ public class ScheduleCommand implements CommandExecutor {
                 int itemID = (int) args.getOne("ID").get();
                 try {
                     parent.removeFromSchedule(itemID);
+                    if(parent.currentScheduleID == itemID) {
+	                    parent.currentScheduleID = null;
+	                    parent.setMaintenance(Status.OFF);
+                    }
                     src.sendMessage(Texts.builder("Maintenance period #" + itemID + " deleted.").color(TextColors.GREEN).build());
                 } catch (SQLException e) {
                     src.sendMessage(Texts.builder("Something went wrong! You should probably check the logs...").color(TextColors.RED).build());
@@ -52,8 +58,9 @@ public class ScheduleCommand implements CommandExecutor {
             }
         } else {
             List<Text> content = new ArrayList<>();
+            Text placeholder = Texts.builder("No scheduled maintenance.").color(TextColors.GRAY).build();
             try {
-                for (ScheduleObject item : parent.getSchedule()) {
+                for (ScheduleObject item : parent.getSchedule(true)) {
                     String duration = "; no duration set";
                     if(item.duration != null && item.duration.compareTo(Duration.ofSeconds(0)) == 1) {
                         Long days = item.duration.toDays();
@@ -63,16 +70,16 @@ public class ScheduleCommand implements CommandExecutor {
                         duration = ", for " + (days > 0 ? days + "d" : "") + (hours > 0 ? hours + "h" : "") + (minutes > 0 ? minutes + "m" : "") + (seconds > 0 ? seconds + "s" : "");
                     }
                     content.add(Texts.builder("#" + item.id + ": " + item.start.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) + " @ " + item.start.format(DateTimeFormatter.ISO_LOCAL_TIME) +
-                            duration).color(TextColors.WHITE).build());
+                            duration).color(item.start.isBefore(LocalDateTime.now()) && item.start.plus(item.duration).isAfter(LocalDateTime.now()) ? TextColors.GOLD : TextColors.WHITE).build());
                 }
                 if(content.isEmpty()) {
-                    content.add(Texts.builder("No scheduled maintenance.").color(TextColors.GRAY).build());
+                    content.add(placeholder);
                 }
 
                 parent.game.getServiceManager().provide(PaginationService.class).get().builder()
                         .title(Texts.builder("Scheduled maintenance periods").color(TextColors.DARK_GREEN).build())
                         .paddingString("#")
-                        .header(Texts.builder("Number of scheduled periods: " + (content.size() == 1 ? 0 : content.size())).color(TextColors.GREEN).build())
+                        .header(Texts.builder("Number of scheduled periods: " + (content.get(0).equals(placeholder)? 0 : content.size())).color(TextColors.GREEN).build())
                         .contents(content)
                         .sendTo(src);
             } catch(SQLException e) {
