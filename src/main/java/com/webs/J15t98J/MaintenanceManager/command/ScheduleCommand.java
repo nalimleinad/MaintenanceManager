@@ -1,9 +1,13 @@
 package com.webs.J15t98J.MaintenanceManager.command;
 
-import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
-import com.webs.J15t98J.MaintenanceManager.ScheduleObject;
-import com.webs.J15t98J.MaintenanceManager.Status;
-import org.spongepowered.api.service.pagination.PaginationBuilder;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.spongepowered.api.service.pagination.PaginationService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.Texts;
@@ -14,14 +18,9 @@ import org.spongepowered.api.util.command.CommandSource;
 import org.spongepowered.api.util.command.args.CommandContext;
 import org.spongepowered.api.util.command.spec.CommandExecutor;
 
-import java.sql.SQLException;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
+import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
+import com.webs.J15t98J.MaintenanceManager.ScheduleObject;
+import com.webs.J15t98J.MaintenanceManager.Status;
 
 public class ScheduleCommand implements CommandExecutor {
 

@@ -1,10 +1,38 @@
 package com.webs.J15t98J.MaintenanceManager;
 
-import com.google.inject.Inject;
-import com.webs.J15t98J.MaintenanceManager.command.*;
-import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinHandler;
+import static org.spongepowered.api.util.command.args.GenericArguments.choices;
+import static org.spongepowered.api.util.command.args.GenericArguments.firstParsing;
+import static org.spongepowered.api.util.command.args.GenericArguments.flags;
+import static org.spongepowered.api.util.command.args.GenericArguments.integer;
+import static org.spongepowered.api.util.command.args.GenericArguments.literal;
+import static org.spongepowered.api.util.command.args.GenericArguments.optional;
+import static org.spongepowered.api.util.command.args.GenericArguments.seq;
+import static org.spongepowered.api.util.command.args.GenericArguments.string;
+
+import java.io.File;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import javax.sql.DataSource;
+
 import ninja.leaping.configurate.commented.CommentedConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
+
 import org.slf4j.Logger;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.entity.player.Player;
@@ -23,20 +51,13 @@ import org.spongepowered.api.util.command.CommandSource;
 import org.spongepowered.api.util.command.args.GenericArguments;
 import org.spongepowered.api.util.command.spec.CommandSpec;
 
-import javax.sql.DataSource;
-import java.io.File;
-import java.io.IOException;
-import java.sql.*;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-
-import static org.spongepowered.api.util.command.args.GenericArguments.*;
+import com.google.inject.Inject;
+import com.webs.J15t98J.MaintenanceManager.command.ExtendCommand;
+import com.webs.J15t98J.MaintenanceManager.command.OffCommand;
+import com.webs.J15t98J.MaintenanceManager.command.OnCommand;
+import com.webs.J15t98J.MaintenanceManager.command.ScheduleCommand;
+import com.webs.J15t98J.MaintenanceManager.command.StatusCommand;
+import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinHandler;
 
 //TODO: interface - maintenance_start/maintenance_end events?
 
@@ -153,7 +174,7 @@ public class MaintenanceManager {
 		//</editor-fold>
 
 		//<editor-fold desc="Schedule registry">
-		taskBuilder = game.getScheduler().getTaskBuilder();
+		taskBuilder = game.getScheduler().createTaskBuilder();
 		try {
 			for(ScheduleObject item : getSchedule(false)) {
 				scheduleMaintenance(new ScheduleObject(item.start, item.duration, item.kickPlayers, item.persistRestart, item.id));
@@ -354,7 +375,7 @@ public class MaintenanceManager {
 		return false;
 	}
 
-	private void createTasks(Status status, boolean kickPlayers, boolean persistRestart, LocalDateTime start, Long ID) {
+	private void createTasks(final Status status, final boolean kickPlayers, final boolean persistRestart, LocalDateTime start, final Long ID) {
 		taskBuilder.execute(new Runnable() {
 			@Override
 			public void run() {
