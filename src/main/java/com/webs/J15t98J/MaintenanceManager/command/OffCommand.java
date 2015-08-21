@@ -1,8 +1,5 @@
 package com.webs.J15t98J.MaintenanceManager.command;
 
-import com.google.common.base.Optional;
-import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
-import com.webs.J15t98J.MaintenanceManager.Status;
 import org.spongepowered.api.text.Texts;
 import org.spongepowered.api.text.format.TextColors;
 import org.spongepowered.api.util.command.CommandException;
@@ -10,6 +7,10 @@ import org.spongepowered.api.util.command.CommandResult;
 import org.spongepowered.api.util.command.CommandSource;
 import org.spongepowered.api.util.command.args.CommandContext;
 import org.spongepowered.api.util.command.spec.CommandExecutor;
+
+import com.google.common.base.Optional;
+import com.webs.J15t98J.MaintenanceManager.MaintenanceManager;
+import com.webs.J15t98J.MaintenanceManager.Status;
 
 public class OffCommand implements CommandExecutor {
 
