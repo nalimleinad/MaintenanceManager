@@ -35,11 +35,11 @@ import ninja.leaping.configurate.loader.ConfigurationLoader;
 
 import org.slf4j.Logger;
 import org.spongepowered.api.Game;
-import org.spongepowered.api.entity.player.Player;
-import org.spongepowered.api.event.EventHandler;
-import org.spongepowered.api.event.Subscribe;
-import org.spongepowered.api.event.entity.player.PlayerJoinEvent;
-import org.spongepowered.api.event.state.InitializationEvent;
+import org.spongepowered.api.entity.living.player.Player;
+import org.spongepowered.api.event.EventListener;
+import org.spongepowered.api.event.Listener;
+import org.spongepowered.api.event.game.state.GameInitializationEvent;
+import org.spongepowered.api.event.network.ClientConnectionEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.service.config.DefaultConfig;
 import org.spongepowered.api.service.scheduler.Task;
@@ -57,7 +57,7 @@ import com.webs.J15t98J.MaintenanceManager.command.OffCommand;
 import com.webs.J15t98J.MaintenanceManager.command.OnCommand;
 import com.webs.J15t98J.MaintenanceManager.command.ScheduleCommand;
 import com.webs.J15t98J.MaintenanceManager.command.StatusCommand;
-import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinHandler;
+import com.webs.J15t98J.MaintenanceManager.event.PlayerJoinListener;
 
 //TODO: interface - maintenance_start/maintenance_end events?
 
@@ -72,7 +72,7 @@ public class MaintenanceManager {
 	private CommentedConfigurationNode rootNode;
 	private SqlService sql;
 
-	private EventHandler<PlayerJoinEvent> joinHandler = new PlayerJoinHandler();
+	private EventListener<ClientConnectionEvent.Join> joinHandler = new PlayerJoinListener();
 	private OnCommand onCMD = new OnCommand(this);
 
 	private TaskBuilder taskBuilder;
@@ -86,8 +86,8 @@ public class MaintenanceManager {
 	private boolean maintenance;
 	public Long currentScheduleID;
 
-	@Subscribe
-	public void onInitialization(InitializationEvent event) {
+	@Listener
+	public void onInitialization(GameInitializationEvent event) {
 		//<editor-fold desc="Metrics">
 		// TODO: test when fix is available
 		/*
@@ -133,8 +133,8 @@ public class MaintenanceManager {
 
 			// Distribute config values to relevant classes
 			onCMD.setKickMessage(kickMessage);
-			((PlayerJoinHandler) joinHandler).setJoinMessageIndefinite(joinMessageIndefinite);
-			((PlayerJoinHandler) joinHandler).setJoinMessageWithDuration(joinMessageWithDuration);
+			((PlayerJoinListener) joinHandler).setJoinMessageIndefinite(joinMessageIndefinite);
+			((PlayerJoinListener) joinHandler).setJoinMessageWithDuration(joinMessageWithDuration);
 
 			try {
 				maintenanceWarnTime = Duration.parse("PT" + warnTime);
@@ -308,7 +308,7 @@ public class MaintenanceManager {
 				}
 
 				logger.info("Enabled " + (persistRestart && couldPersist? "persistent " : "") + "maintenence.");
-				game.getEventManager().register(this, PlayerJoinEvent.class, joinHandler);
+				game.getEventManager().registerListener(this, ClientConnectionEvent.Join.class, joinHandler);
 				maintenance = true;
 
 				if(!kickPlayers) {
@@ -329,7 +329,7 @@ public class MaintenanceManager {
 					}
 				}
 
-				game.getEventManager().unregister(joinHandler);
+				game.getEventManager().unregisterListeners(joinHandler);
 				maintenance = false;
 				MessageSinks.toAll().sendMessage(Texts.of(onOpenMessage));
 
@@ -363,9 +363,9 @@ public class MaintenanceManager {
 			createTasks(Status.ON, item.kickPlayers, item.persistRestart, item.start, item.id);
 			if(item.duration != null) {
 				createTasks(Status.OFF, false, false, item.start.plus(item.duration), item.id);
-				((PlayerJoinHandler) joinHandler).setOpeningTime(item.start.plus(item.duration).atZone(ZoneId.systemDefault()));
+				((PlayerJoinListener) joinHandler).setOpeningTime(item.start.plus(item.duration).atZone(ZoneId.systemDefault()));
 			} else {
-				((PlayerJoinHandler) joinHandler).setOpeningTime(null);
+				((PlayerJoinListener) joinHandler).setOpeningTime(null);
 			}
 
 			return true;
