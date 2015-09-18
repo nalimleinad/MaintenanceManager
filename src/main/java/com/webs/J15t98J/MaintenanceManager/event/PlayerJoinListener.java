@@ -4,12 +4,12 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 
-import org.spongepowered.api.entity.player.Player;
-import org.spongepowered.api.event.EventHandler;
-import org.spongepowered.api.event.entity.player.PlayerJoinEvent;
+import org.spongepowered.api.entity.living.player.Player;
+import org.spongepowered.api.event.EventListener;
+import org.spongepowered.api.event.network.ClientConnectionEvent;
 import org.spongepowered.api.text.Texts;
 
-public class PlayerJoinHandler implements EventHandler<PlayerJoinEvent> {
+public class PlayerJoinListener implements EventListener<ClientConnectionEvent.Join> {
 
     private String joinMessageWithDuration = null;
     private String joinMessageIndefinite = null;
@@ -28,8 +28,8 @@ public class PlayerJoinHandler implements EventHandler<PlayerJoinEvent> {
     }
 
     @Override
-    public void handle(PlayerJoinEvent event) throws Exception {
-        Player player = event.getUser();
+    public void handle(ClientConnectionEvent.Join event) throws Exception {
+        Player player = (Player) event.getCause();
         if(!player.hasPermission("maintenance.exempt")) {
             boolean opensToday = false;
             if(openingTime != null) {
