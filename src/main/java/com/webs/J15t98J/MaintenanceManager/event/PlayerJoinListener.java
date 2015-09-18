@@ -29,7 +29,7 @@ public class PlayerJoinListener implements EventListener<ClientConnectionEvent.J
 
     @Override
     public void handle(ClientConnectionEvent.Join event) throws Exception {
-        Player player = (Player) event.getCause();
+        Player player = (Player) event.getTargetEntity();
         if(!player.hasPermission("maintenance.exempt")) {
             boolean opensToday = false;
             if(openingTime != null) {
