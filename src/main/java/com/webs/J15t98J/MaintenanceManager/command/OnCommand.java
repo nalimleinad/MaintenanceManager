@@ -80,7 +80,7 @@ public class OnCommand implements CommandExecutor {
                     end = LocalDateTime.now().plus(duration);
                 }
 
-                if(duration != null? parent.scheduleMaintenance(new ScheduleObject(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS), duration, shouldKick, shouldPersist)) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
+                if(duration != null ? parent.scheduleMaintenance(new ScheduleObject(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS), duration, shouldKick, shouldPersist)) : parent.setMaintenance(Status.ON, shouldKick, shouldPersist)) {
                     src.sendMessage(Texts.builder(shouldPersist ? "Persistent " : "").color(TextColors.GOLD) // First two builders tell the user if it's persistent
                             .append(Texts.builder((shouldPersist ? "m" : "M") + "aintenance mode ").color(TextColors.WHITE).build())
                             .append(Texts.builder("enabled").color(TextColors.RED).build()) // Next one just says enabled

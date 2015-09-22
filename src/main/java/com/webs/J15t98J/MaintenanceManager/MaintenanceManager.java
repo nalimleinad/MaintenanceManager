@@ -322,11 +322,13 @@ public class MaintenanceManager {
 				boolean success = true;
 
 				if(inMaintenance()) {
-					try {
-						removeFromSchedule(currentScheduleID.intValue());
-					} catch(SQLException e) {
-						logger.error("Error with database:", e);
-					}
+					if (currentScheduleID != null) {
+						try {
+							removeFromSchedule(currentScheduleID.intValue());
+						} catch(SQLException e) {
+							logger.error("Error with database:", e);
+	                    }
+				    }
 				}
 
 				game.getEventManager().unregisterListeners(joinHandler);
